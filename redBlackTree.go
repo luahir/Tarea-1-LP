@@ -5,12 +5,6 @@
 
 package redBlackTree
 
-type Value interface {}
-
-type Item struct {
-      value Value
-}
-
 type rbTree interface {
       NewTree()
       PrettyPrint()
@@ -19,4 +13,12 @@ type rbTree interface {
       Delete()
       Find()
       InOrderPrint()
+}
+
+type Node struct {
+      value interface{}
+      color  Color
+      left   *Node
+      right  *Node
+      parent *Node
 }
