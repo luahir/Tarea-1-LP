@@ -72,9 +72,10 @@ func (pNode *Node) String() string {
 // por lo que se define comparación entre enteros e hileras.
 // El comparador genérico permite que el árbol reciba el comparador como un tipo, para que pueda
 // comparar los valores dentro de los nodos.
-type Comp func (o1, o2 interface{}) int
+type Cmp func (o1, o2 interface{}) int
 
-func IntComp(o1, o2 interface{}) int {
+func IntCmp(o1, o2 interface{}) int {
+      // Se comprueba que tanto o1 como o2 son enteros y por ende comparables
       int1, int2 := o1.(int), o2.(int)
 
       switch {
@@ -87,7 +88,8 @@ func IntComp(o1, o2 interface{}) int {
       }
 }
 
-func StringComp(o1, o2 string) int {
+func StringCmp(o1, o2 interface{}) int {
+      // Se comprueba que tanto o1 como o2 son hileras y por ende comparables
       st1, st2 := o1.(string), o2.(string)
 
       switch {
@@ -98,5 +100,22 @@ func StringComp(o1, o2 string) int {
       default:
             return 0
       }
+}
+
+// La estructura de árbol requiere una raíz (en forma de nodo) y un comparador
+// para los diferentes tipos permitidos. Si se quisiera utilizar otro tipo
+// sería necesario escribir un comparador.
+type RBTree struct {
+      root *Node
+      cmp Cmp
+}
+
+// Se define un nuevo árbol con un comparador y raíz nula.
+func NewRBTree(pCmp Cmp) *RBTree {
+      var tree = RBTree{}
+      tree.root = nil
+      tree.cmp = pCmp
+
+      return &tree
 }
 
