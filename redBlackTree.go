@@ -9,6 +9,10 @@ import (
       "fmt"
 )
 
+const (
+      NEGRO, ROJO Color = true, false
+)
+
 // Interfaz para el árbol rojinegro. Cualquier implementación del árbol
 // requiere estos métodos (según se indican en la tarea programada)
 type rbTreer interface {
@@ -39,8 +43,8 @@ func (pColor Color) String() string {
 type Node struct {
       // Se utiliza value como interface{} para que pueda ser de 
       // cualquier tipo.
-      value  interface{}
-      color  Color
+      value   interface{}
+      color   Color
       left   *Node
       right  *Node
       parent *Node
@@ -107,15 +111,53 @@ func StringCmp(o1, o2 interface{}) int {
 // sería necesario escribir un comparador.
 type RBTree struct {
       root *Node
-      cmp Cmp
+      cmp   Cmp
+      count int
+
 }
 
 // Se define un nuevo árbol con un comparador y raíz nula.
 func NewRBTree(pCmp Cmp) *RBTree {
-      var tree = RBTree{}
-      tree.root = nil
-      tree.cmp = pCmp
-
-      return &tree
+      tree := &RBTree{root: nil, cmp: pCmp, count: 0}
+      return tree
 }
+
+// Método de inserción en el árbol, que introduce el nodo con valor pValue.
+// Este método solamente inserta el valor como en un árbol de búsqueda binario.
+func (tree *RBTree) Insert(pValue interface{}) *Node {
+      if tree.root == nil {
+            node := &Node{value: pValue, color: NEGRO}
+            tree.root = node
+            tree.count++
+            return node
+      }
+
+      parentNode := tree.root
+
+      for true {
+            compare := tree.cmp(pValue, parentNode.value)
+            switch {
+            case compare == 0:
+                  return nil
+            case compare == -1 && parentNode.left == nil:
+                  n := &Node{value: pValue, parent: parentNode}
+                  parentNode.left = n
+                  tree.count++
+                  return n
+            case compare == -1 && parentNode.left != nil:
+                  parentNode = parentNode.left
+            case compare == 1 && parentNode.right == nil:
+                  n := &Node{value: pValue, parent: parentNode}
+                  parentNode.right = n
+                  tree.count++
+                  return n
+            case compare == 1 && parentNode.right != nil:
+                  parentNode = parentNode.right
+
+            }
+
+      }
+      panic("Inserción fallida")
+}
+
 
