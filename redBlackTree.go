@@ -343,6 +343,9 @@ type Iterator interface {
 type InorderIterator struct {
 }
 
+type PreorderIterator struct {
+}
+
 // Mediante un canal se recorre el árbol en in-order.
 func (iter *InorderIterator) Iterate(node *Node) <-chan *Node {
       // Canal de tipo *Node.
@@ -367,6 +370,36 @@ func (iter *InorderIterator) Iterate(node *Node) <-chan *Node {
       go func() {
             if node != nil {
                   visit(node)
+            }
+            close(ch)
+      }()
+
+      return ch
+}
+
+// Mediante un canal se recorre el árbol en preorder.
+func (iter *PreorderIterator) Iterate(node *Node) <-chan *Node {
+      // Canal de tipo *Node.
+      ch := make(chan *Node)
+
+      // Función de visita, que se necesita solamente para
+      // el iterador, en preorder.
+      var postVisit func(*Node)
+      postVisit = func(visitNode *Node) {
+            ch <- visitNode
+            if visitNode.left != nil {
+                  postVisit(visitNode.left)
+            }
+
+            if visitNode.right != nil {
+                  postVisit(visitNode.right)
+            }
+      }
+
+      // Se llama a una goroutine que se encarga de visitar el resto de los nodos.
+      go func() {
+            if node != nil {
+                  postVisit(node)
             }
             close(ch)
       }()
@@ -413,6 +446,7 @@ func (tree *RBTree) String() string {
 func (tree *RBTree) Clear() {
       deleteAll(tree.root)
       tree.root = nil
+      tree.count = 0
 }
 
 // deleteAll elimina los nodos recursivamente, mediante un recorrido en postorder
@@ -428,7 +462,201 @@ func deleteAll(node *Node) {
 // Delete elimina el nodo que coincide con el valor dado. No hace nada
 // si la llave no existe
 func (tree *RBTree) Delete(pKey interface{}) {
-      _, nodeToDel := tree.Find(pKey)
-      nodeCopy := nodeToDel
+      _, node := tree.Find(pKey)
+      tree.count--
+      nodeCopy := node
+      fmt.Println("nodeCopy", nodeCopy)
+      // Se guarda el color para revisar si existen violaciones por colores.
       copyColor := nodeCopy.color
+      fmt.Println("En delete: color original", copyColor)
+      var tempNode *Node
+
+      // El borrado se maneja con varios casos, según la cantidad de hijos
+      // que tenga el nodo por borrar y según el color de cada uno.
+      // Ubica el único hijo donde estaba node originalmente.
+      if node.left == nil {
+            // Tiene un hijo derecho.
+            fmt.Println("Tiene 1 hijo derecho")
+            tempNode = node.right
+            tree.replace(node, node.right)
+      } else if node.right == nil {
+            // Tiene un hijo izquierdo.
+            fmt.Println("Tiene 1 hijo izquierdo")
+            tempNode = node.left
+            tree.replace(node, node.left)
+      } else {
+            // Tiene dos hijos.
+            fmt.Println("Tiene 2 hijos")
+            nodeCopy = tree.getMin(node.right)
+            fmt.Println("nodeCopy", nodeCopy)
+            tempNode = nodeCopy.right
+            fmt.Println("tempNode", tempNode)
+            copyColor = nodeCopy.color
+            fmt.Println("En delete: color si tiene 2 hijos", copyColor)
+
+            // Si nodeCopy es hijo de node, tempNode es hijo de nodeCopy
+            // si no es nulo.
+            if nodeCopy.parent == node {
+                  if tempNode != nil {
+                        tempNode.parent = nodeCopy
+                  }
+            // Si nodeCopy no es hijo de node, se cambia nodeCopy por su hijo derecho.
+            } else {
+                  tree.replace(nodeCopy, nodeCopy.right)
+                  nodeCopy.right = node.right
+                  nodeCopy.right.parent = nodeCopy
+            }
+            // Se reemplaza node por nodeCopy
+            tree.replace(node, nodeCopy)
+            nodeCopy.left = node.left
+            nodeCopy.left.parent = nodeCopy
+            nodeCopy.color = node.color
+            fmt.Println("En delete: colores del nodo al final de dos hijos", node.color)
+      }
+      // Se revisa que el borrado no viole ninguna regla del árbol. Si viola alguna regla,
+      // se arregla allí.
+      fmt.Println("En delete: colores al final", copyColor)
+      if copyColor == NEGRO {
+            tree.deleteFix(tempNode)
+      }
+}
+
+// replace se encarga de reubicar nodos, de modo que ubica a newNode en la
+// ubicación oldNode
+func (tree *RBTree) replace(oldNode *Node, newNode *Node) {
+      switch {
+      case oldNode.parent == nil:
+            tree.root = newNode
+      case oldNode == oldNode.parent.left:
+            oldNode.parent.left = newNode
+      case oldNode == oldNode.parent.right:
+            oldNode.parent.right = newNode
+      case oldNode != nil && newNode != nil:
+            newNode.parent = oldNode.parent
+      }
+}
+
+// Para un nodo no nulo devuelve el valor más pequeño que puede obtenerse
+// desde node (el hijo izquierdo más abajo a partir de node).
+func (tree *RBTree) getMin(node *Node) *Node {
+      for {
+            if node.left != nil {
+                  node = node.left
+            } else {
+                  return node
+            }
+      }
+}
+
+// deleteFix arregla cualquier violación a las condiciones del árbol rojinegro
+// que pudieron surgir de modificar el árbol con delete.
+func (tree *RBTree) deleteFix(node *Node) {
+      fmt.Printf("Entra a arreglar nodo %s\n", node)
+      if node == nil {
+            return
+      }
+loop:
+      for {
+            switch {
+            // Los primeros dos casos son los más sencillos, pues no hay que arreglar nada.
+            case node == tree.root:
+                  fmt.Println("es la raíz")
+                  break loop
+            case node.color == ROJO:
+                  fmt.Println("listo, rojo")
+                  break loop
+            // Se tiene dos casos "espejo", cuando el hijo es derecho o izquierdo. En ambos
+            // casos se busca convertir los casos a casos más sencillos
+            case node == node.parent.right:
+                  fmt.Println("nodo es el hijo derecho")
+                  sibling := node.parent.left
+                  if sibling.color == ROJO {
+                        fmt.Printf("hermano rojo")
+                        sibling.color = NEGRO
+                        node.parent.color = ROJO
+                        tree.rotRight(node.parent)
+                        sibling = node.parent.left
+                  }
+                  if sibling != nil {
+                        switch {
+                        // 2 hijos negros.
+                        case sibling.left.color != ROJO && sibling.right.color != ROJO:
+                              fmt.Println("2 hijos negros")
+                              sibling.color = ROJO
+                              node = node.parent
+                        //  Hijo derecho rojo, hijo izquierdo negro.
+                        case sibling.right.color == ROJO && sibling.left.color != ROJO:
+                              fmt.Println("hijos derecho rojo, hijo izquierdo negro")
+                              sibling.right.color = NEGRO
+                              sibling.color = ROJO
+                              tree.rotLeft(sibling)
+                              sibling = node.parent.left
+                        }
+                        // Hijo izquierdo rojo
+                        if sibling.left.color == ROJO {
+                              fmt.Println("hijo izquierdo rojo")
+                              sibling.color = node.parent.color
+                              node.parent.color = NEGRO
+                              sibling.left.color = NEGRO
+                              tree.rotRight(node.parent)
+                              node = tree.root
+                        }
+                  }
+            // El caso simétrico, donde se cambia left por right en muchos casos.
+            case node == node.parent.left:
+                  fmt.Println("nodo es el hijo izquierdo")
+                  sibling := node.parent.right
+                  // Se rota para cambiar el caso y que sea contemplado por los siguientes condicionales
+                  if sibling.color == ROJO {
+                        fmt.Printf("hermano rojo")
+                        sibling.color = NEGRO
+                        node.parent.color = ROJO
+                        tree.rotLeft(node.parent)
+                        sibling = node.parent.right
+                  }
+                  if sibling != nil {
+                        switch {
+                        // 2 hijos negros
+                        case sibling.left.color != ROJO && sibling.right.color != ROJO:
+                              fmt.Println("2 hijos negros")
+                              sibling.color = ROJO
+                              node = node.parent
+                        // Hijo izquierdo rojo, hijo derecho negro
+                        case sibling.left.color == ROJO && sibling.right.color != ROJO:
+                              fmt.Println("hijos izquierdo rojo, hijo derecho negro")
+                              sibling.left.color = NEGRO
+                              sibling.color = ROJO
+                              tree.rotRight(sibling)
+                              sibling = node.parent.right
+                        }
+                        // Hijo derecho rojo
+                        if sibling.right.color == ROJO {
+                              fmt.Println("hijo derecho rojo")
+                              sibling.color = node.parent.color
+                              node.parent.color = NEGRO
+                              sibling.right.color = NEGRO
+                              tree.rotLeft(node.parent)
+                              node = tree.root
+                        }
+                  }
+            }
+      }
+      node.color = NEGRO
+}
+
+func (tree *RBTree) PrettyPrint() {
+      printChildren(tree.root, "")
+}
+
+func printChildren(node *Node, spaces string) {
+      fmt.Println(node)
+      spaces += "    "
+      if node.left != nil {
+            fmt.Print(spaces, "|-- ")
+            printChildren(node.left, spaces)
+      }
+      if node.right != nil {
+            fmt.Print(spaces, "|-- ")
+            printChildren(node.right, spaces)
+      }
 }
